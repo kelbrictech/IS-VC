@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Image Sequencer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <div id="menubar">
+    <div class="menu" data-menu="file">
+      <button class="menu-trigger">File</button>
+      <div class="menu-dropdown">
+        <button id="btn-import-images">Import images</button>
+        <button id="btn-import-audio">Import audio…</button>
+        <button id="btn-open-watermark-dialog">Watermark…</button>
+        <div class="menu-divider"></div>
+        <button id="btn-export" class="primary">Export…</button>
+      </div>
+    </div>
+    <div class="menu" data-menu="capture">
+      <button class="menu-trigger">Capture</button>
+      <div class="menu-dropdown">
+        <button id="btn-toggle-capture">Start capture</button>
+        <button id="btn-capture-frame" disabled>Capture frame</button>
+      </div>
+    </div>
+    <div class="menu" data-menu="view">
+      <button class="menu-trigger">View</button>
+      <div class="menu-dropdown">
+        <button id="btn-play">Play sequence</button>
+        <label class="menu-checkbox"><input type="checkbox" id="fullscreen-on-play-toggle" checked /> Fullscreen upon play</label>
+        <div class="menu-divider"></div>
+        <button id="btn-toggle-inspector-menu">Toggle frame settings</button>
+      </div>
+    </div>
+    <div id="menubar-spacer"></div>
+    <button id="btn-pixabay">Find music (Pixabay)</button>
+    <input type="file" id="file-images" accept="image/*" multiple class="hidden" />
+    <input type="file" id="file-audio" accept="audio/*" class="hidden" />
+  </div>
+
+  <div id="main">
+    <div id="preview-area">
+      <canvas id="preview-canvas" width="1280" height="720"></canvas>
+      <video id="capture-video" autoplay muted playsinline></video>
+      <p id="preview-caption">no frame selected</p>
+      <p id="playback-timer" class="hidden">0:00.0 / 0:00.0</p>
+    </div>
+
+    <div id="frame-inspector">
+      <div class="section-header" id="btn-toggle-inspector">
+        <span class="section-title">frame settings</span>
+        <span class="caret">▾</span>
+      </div>
+      <div id="frame-inspector-body" class="section-body">
+        <div class="unit-toggle" id="unit-toggle">
+          <button type="button" class="unit-btn active" data-unit="fps">fps</button>
+          <button type="button" class="unit-btn" data-unit="ms">ms</button>
+        </div>
+
+        <label><span class="label-text" id="label-frame-duration">selected frame rate (fps)</span>
+          <input type="number" id="frame-duration-input" min="1" max="60" step="1" disabled />
+        </label>
+        <div id="global-duration-controls">
+          <label><span class="label-text" id="label-global">global fps</span>
+            <input type="number" id="global-fps-input" min="1" max="60" step="1" value="12" />
+          </label>
+          <button id="btn-apply-all">apply to all frames</button>
+
+          <label>apply to frames (e.g. 1-5, 22, 24, 37)
+            <input type="text" id="frame-range-input" placeholder="1-5, 22, 24, 37" />
+          </label>
+          <label><span class="label-text" id="label-range-duration">rate (fps)</span>
+            <input type="number" id="range-duration-input" min="1" max="60" step="1" value="12" />
+          </label>
+          <button id="btn-apply-range">apply to these frames</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="timeline-section" class="accordion-section">
+    <div class="section-header" id="timeline-header">
+      <span class="section-title">frame timeline</span>
+      <span id="frame-count" class="section-badge">0 frames</span>
+      <span class="caret">▾</span>
+    </div>
+    <div id="frame-track" class="section-body"></div>
+  </div>
+
+  <div id="audio-section" class="accordion-section">
+    <div class="section-header collapsed" id="audio-header">
+      <span class="section-title">audio track</span>
+      <span id="audio-name" class="section-badge">none</span>
+      <span class="caret">▾</span>
+    </div>
+    <div id="audio-body" class="section-body collapsed">
+      <canvas id="audio-waveform" height="48"></canvas>
+      <p id="audio-hint">click waveform to edit trim / offset / volume</p>
+      <div id="audio-controls" class="hidden">
+        <label>trim start (s) <input type="number" id="audio-trim-start" min="0" step="0.1" value="0" /></label>
+        <label>trim end (s) <input type="number" id="audio-trim-end" min="0" step="0.1" /></label>
+        <label>start offset (s) <input type="number" id="audio-offset" min="0" step="0.1" value="0" /></label>
+        <label>volume <input type="range" id="audio-volume" min="0" max="100" value="100" /> <span id="audio-volume-readout">100%</span></label>
+        <div class="audio-controls-actions">
+          <button id="btn-audio-apply" class="primary">apply</button>
+          <button id="btn-audio-remove">remove audio</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="subtitle-section" class="accordion-section">
+    <div class="section-header collapsed" id="subtitle-header">
+      <span class="section-title">subtitles</span>
+      <span id="subtitle-count" class="section-badge">0</span>
+      <button type="button" id="btn-add-subtitle" class="small-btn no-toggle">+ add subtitle</button>
+      <span class="caret">▾</span>
+    </div>
+    <div id="subtitle-body" class="section-body collapsed">
+      <div id="subtitle-track"></div>
+      <div id="subtitle-edit" class="hidden">
+        <label>text
+          <textarea id="subtitle-text-input" rows="2"></textarea>
+        </label>
+        <div class="chip-row">
+          <span class="chip-row-label">size</span>
+          <button type="button" class="size-btn" data-size="small">S</button>
+          <button type="button" class="size-btn" data-size="medium">M</button>
+          <button type="button" class="size-btn" data-size="large">L</button>
+        </div>
+        <div class="chip-row">
+          <span class="chip-row-label">style</span>
+          <button type="button" class="style-btn" data-style="light-shadow">light + dark shadow</button>
+          <button type="button" class="style-btn" data-style="dark-glow">dark + light glow</button>
+        </div>
+        <div class="subtitle-time-row">
+          <label>start (s) <input type="number" id="subtitle-start-input" min="0" step="0.1" /></label>
+          <label>duration (s) <input type="number" id="subtitle-duration-input" min="0.1" step="0.1" /></label>
+        </div>
+        <div class="subtitle-edit-actions">
+          <button id="btn-subtitle-apply" class="primary">apply</button>
+          <button id="btn-subtitle-delete">delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="watermark-modal" class="hidden">
+    <div id="watermark-modal-body">
+      <h2>Watermark</h2>
+      <div class="modal-row">
+        <button id="btn-import-watermark">Import PNG</button>
+        <span id="watermark-name">none</span>
+      </div>
+      <div class="chip-row wrap">
+        <span class="chip-row-label">position</span>
+        <button type="button" class="wm-pos-btn active" data-pos="top-right">top right</button>
+        <button type="button" class="wm-pos-btn" data-pos="top-left">top left</button>
+        <button type="button" class="wm-pos-btn" data-pos="bottom-right">bottom right</button>
+        <button type="button" class="wm-pos-btn" data-pos="bottom-left">bottom left</button>
+        <button type="button" class="wm-pos-btn" data-pos="center">center frame</button>
+      </div>
+      <div class="chip-row wrap">
+        <span class="chip-row-label">opacity</span>
+        <button type="button" class="wm-opacity-btn active" data-opacity="1">original</button>
+        <button type="button" class="wm-opacity-btn" data-opacity="0.75">75%</button>
+        <button type="button" class="wm-opacity-btn" data-opacity="0.5">50%</button>
+        <button type="button" class="wm-opacity-btn" data-opacity="0.25">25%</button>
+      </div>
+      <input type="file" id="file-watermark" accept="image/png" class="hidden" />
+      <div class="modal-actions">
+        <button id="btn-remove-watermark">remove</button>
+        <button id="btn-watermark-close" class="primary">done</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="export-modal" class="hidden">
+    <div id="export-modal-body">
+      <h2>Export</h2>
+      <label>format
+        <select id="export-format">
+          <option value="webm">WebM (video)</option>
+          <option value="gif">GIF (no audio)</option>
+        </select>
+      </label>
+      <label>output for
+        <select id="export-preset">
+          <option value="tiktok" data-w="1080" data-h="1920">TikTok — 1080×1920 (9:16)</option>
+          <option value="ig-reels" data-w="1080" data-h="1920">Instagram Reels / Story — 1080×1920 (9:16)</option>
+          <option value="ig-feed" data-w="1080" data-h="1350">Instagram feed — 1080×1350 (4:5)</option>
+          <option value="yt-shorts" data-w="1080" data-h="1920">YouTube Shorts — 1080×1920 (9:16)</option>
+          <option value="fb-reels" data-w="1080" data-h="1920">Facebook Reels / Story — 1080×1920 (9:16)</option>
+          <option value="fb-feed" data-w="1080" data-h="1080">Facebook feed — 1080×1080 (1:1)</option>
+          <option value="landscape" data-w="1920" data-h="1080">Landscape — 1920×1080 (16:9)</option>
+          <option value="custom" data-w="" data-h="">Custom size</option>
+        </select>
+      </label>
+      <div id="custom-size-row" class="hidden">
+        <label>width <input type="number" id="custom-width" value="1080" min="16" /></label>
+        <label>height <input type="number" id="custom-height" value="1920" min="16" /></label>
+      </div>
+      <p id="preset-note">MP4 isn't available in this browser-only version yet — export WebM and convert if you need MP4, or ask for the MP4 add-on. GIF export drops audio.</p>
+      <p id="export-status"></p>
+      <div class="modal-actions">
+        <button id="btn-export-cancel">cancel</button>
+        <button id="btn-export-confirm" class="primary">export</button>
+      </div>
+    </div>
+  </div>
+
+
+<script src="script.js"></script>
+</body>
+</html>
