@@ -340,6 +340,11 @@ document.getElementById('file-audio').addEventListener('change', async (e) => {
   const arrayBuffer = await file.arrayBuffer();
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   const buffer = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+  const dataUrl = await new Promise((res) => {
+    const reader = new FileReader();
+    reader.onload = () => res(reader.result);
+    reader.readAsDataURL(file);
+  });
 
   const channel = buffer.getChannelData(0);
   const samples = 200;
@@ -355,7 +360,7 @@ document.getElementById('file-audio').addEventListener('change', async (e) => {
     peaks.push(max);
   }
 
-  audioClip = { name: file.name, buffer, peaks, trimStart: 0, trimEnd: buffer.duration, offsetMs: 0, volume: 1 };
+  audioClip = { name: file.name, dataUrl, buffer, peaks, trimStart: 0, trimEnd: buffer.duration, offsetMs: 0, volume: 1 };
   audioNameLabel.textContent = file.name;
   drawWaveform();
   expandAccordion('audio-header', 'audio-body');
@@ -656,6 +661,14 @@ async function runExport() {
       const blob = await recordWebm({ frames: resolvedFrames, audio: audioClip, width, height });
       downloadBlob(blob, 'sequence.webm');
       exportStatus.textContent = 'downloaded sequence.webm';
+    } else if (format === 'mp4') {
+      const webmBlob = await recordWebm({ frames: resolvedFrames, audio: audioClip, width, height });
+      exportStatus.textContent = 'preparing MP4\u2026';
+      const mp4Blob = await window.convertWebmToMp4(webmBlob, (msg) => {
+        exportStatus.textContent = msg;
+      });
+      downloadBlob(mp4Blob, 'sequence.mp4');
+      exportStatus.textContent = 'downloaded sequence.mp4';
     } else if (format === 'gif') {
       const blob = await exportGif({ frames: resolvedFrames, width, height });
       downloadBlob(blob, 'sequence.gif');
@@ -1043,6 +1056,140 @@ document.getElementById('btn-open-watermark-dialog').addEventListener('click', (
 });
 document.getElementById('btn-watermark-close').addEventListener('click', () => {
   document.getElementById('watermark-modal').classList.add('hidden');
+});
+
+// ---------- Save / Load project ----------
+function serializeProject() {
+  return {
+    version: 1,
+    savedAt: new Date().toISOString(),
+    globalFps,
+    frames: frames.map((f) => ({ dataUrl: f.dataUrl, durationMs: f.durationMs })),
+    subtitles: subtitles.map((s) => ({ ...s })),
+    audio: audioClip ? {
+      name: audioClip.name,
+      dataUrl: audioClip.dataUrl,
+      trimStart: audioClip.trimStart,
+      trimEnd: audioClip.trimEnd,
+      offsetMs: audioClip.offsetMs,
+      volume: audioClip.volume,
+    } : null,
+    watermark: watermark ? {
+      dataUrl: watermark.dataUrl,
+      position: watermark.position,
+      opacity: watermark.opacity,
+    } : null,
+  };
+}
+
+document.getElementById('btn-save-project').addEventListener('click', () => {
+  if (frames.length === 0) { alert('Nothing to save yet \u2014 import or capture at least one frame first.'); return; }
+  const data = serializeProject();
+  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+  downloadBlob(blob, 'sequence-project.json');
+});
+
+document.getElementById('btn-load-project').addEventListener('click', () => {
+  document.getElementById('file-project').click();
+});
+
+document.getElementById('file-project').addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+
+  let data;
+  try {
+    data = JSON.parse(await file.text());
+  } catch (err) {
+    alert('Could not read this project file \u2014 it may be corrupted or not a project file.');
+    return;
+  }
+  if (!data || !Array.isArray(data.frames)) {
+    alert('This doesn\u2019t look like a valid project file.');
+    return;
+  }
+
+  if (playbackState.playing) stopPlayback();
+  stopCaptureIfActive();
+
+  // Frames
+  frames = data.frames.map((f) => ({ id: nextFrameId++, dataUrl: f.dataUrl, durationMs: f.durationMs != null ? f.durationMs : null }));
+  globalFps = data.globalFps || 12;
+  globalFpsInput.value = durationUnit === 'ms' ? Math.round(1000 / globalFps) : globalFps;
+
+  // Subtitles
+  subtitles = Array.isArray(data.subtitles) ? data.subtitles.map((s) => ({ ...s })) : [];
+  nextSubtitleId = subtitles.reduce((max, s) => Math.max(max, s.id + 1), 1);
+  selectedSubtitleId = null;
+  subtitleEditPanel.classList.add('hidden');
+
+  // Audio (re-decode from the embedded data URL)
+  audioClip = null;
+  audioNameLabel.textContent = 'none';
+  if (data.audio && data.audio.dataUrl) {
+    try {
+      const res = await fetch(data.audio.dataUrl);
+      const arrayBuffer = await res.arrayBuffer();
+      const tempCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const buffer = await tempCtx.decodeAudioData(arrayBuffer);
+      const channel = buffer.getChannelData(0);
+      const samples = 200;
+      const blockSize = Math.floor(channel.length / samples);
+      const peaks = [];
+      for (let i = 0; i < samples; i++) {
+        let max = 0;
+        const start = i * blockSize;
+        for (let j = 0; j < blockSize; j++) {
+          const abs = Math.abs(channel[start + j] || 0);
+          if (abs > max) max = abs;
+        }
+        peaks.push(max);
+      }
+      audioClip = {
+        name: data.audio.name || 'audio',
+        dataUrl: data.audio.dataUrl,
+        buffer, peaks,
+        trimStart: data.audio.trimStart || 0,
+        trimEnd: data.audio.trimEnd || buffer.duration,
+        offsetMs: data.audio.offsetMs || 0,
+        volume: data.audio.volume != null ? data.audio.volume : 1,
+      };
+      audioNameLabel.textContent = audioClip.name;
+      drawWaveform();
+      expandAccordion('audio-header', 'audio-body');
+    } catch (err) {
+      alert('Loaded the project, but the saved audio could not be restored: ' + err.message);
+    }
+  }
+
+  // Watermark
+  watermark = null;
+  document.getElementById('watermark-name').textContent = 'none';
+  if (data.watermark && data.watermark.dataUrl) {
+    try {
+      const img = await loadImage(data.watermark.dataUrl);
+      watermark = {
+        dataUrl: data.watermark.dataUrl,
+        img,
+        naturalWidth: img.width,
+        naturalHeight: img.height,
+        position: data.watermark.position || 'top-right',
+        opacity: data.watermark.opacity != null ? data.watermark.opacity : 1,
+      };
+      document.getElementById('watermark-name').textContent = 'restored watermark';
+      document.querySelectorAll('.wm-pos-btn').forEach((b) => b.classList.toggle('active', b.dataset.pos === watermark.position));
+      document.querySelectorAll('.wm-opacity-btn').forEach((b) => b.classList.toggle('active', Number(b.dataset.opacity) === watermark.opacity));
+    } catch (err) {
+      alert('Loaded the project, but the saved watermark could not be restored: ' + err.message);
+    }
+  }
+
+  selectedFrameId = null;
+  frameDurationInput.disabled = true;
+  renderFrameTrack();
+  if (frames.length) selectFrame(frames[0].id);
+  else previewCaption.textContent = 'no frame selected';
 });
 
 renderFrameTrack();
