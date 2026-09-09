@@ -16,6 +16,9 @@
         <button id="btn-import-audio">Import audio…</button>
         <button id="btn-open-watermark-dialog">Watermark…</button>
         <div class="menu-divider"></div>
+        <button id="btn-save-project">Save project…</button>
+        <button id="btn-load-project">Load project…</button>
+        <div class="menu-divider"></div>
         <button id="btn-export" class="primary">Export…</button>
       </div>
     </div>
@@ -39,6 +42,7 @@
     <button id="btn-pixabay">Find music (Pixabay)</button>
     <input type="file" id="file-images" accept="image/*" multiple class="hidden" />
     <input type="file" id="file-audio" accept="audio/*" class="hidden" />
+    <input type="file" id="file-project" accept="application/json,.json" class="hidden" />
   </div>
 
   <div id="main">
@@ -184,6 +188,7 @@
       <label>format
         <select id="export-format">
           <option value="webm">WebM (video)</option>
+          <option value="mp4">MP4 (video)</option>
           <option value="gif">GIF (no audio)</option>
         </select>
       </label>
@@ -203,7 +208,7 @@
         <label>width <input type="number" id="custom-width" value="1080" min="16" /></label>
         <label>height <input type="number" id="custom-height" value="1920" min="16" /></label>
       </div>
-      <p id="preset-note">MP4 isn't available in this browser-only version yet — export WebM and convert if you need MP4, or ask for the MP4 add-on. GIF export drops audio.</p>
+      <p id="preset-note">MP4 transcodes from WebM in-browser the first time you use it — it downloads a one-time ~25MB engine from a CDN, so it needs internet access and is noticeably slower than WebM/GIF. GIF export drops audio.</p>
       <p id="export-status"></p>
       <div class="modal-actions">
         <button id="btn-export-cancel">cancel</button>
@@ -214,5 +219,47 @@
 
 
 <script src="script.js"></script>
+<script type="module">
+  // MP4 export support: loads ffmpeg.wasm (single-thread core \u2014 chosen
+  // specifically because it needs no special cross-origin server headers,
+  // unlike the multi-thread core) on first use, then transcodes the WebM
+  // this app already produces into MP4. Exposed on window so the classic
+  // script above (script.js) can call it without itself being a module.
+  import { FFmpeg } from 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js';
+  import { fetchFile, toBlobURL } from 'https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/esm/index.js';
+
+  let ffmpegInstance = null;
+  let loadingPromise = null;
+
+  async function getFFmpeg(onStatus) {
+    if (ffmpegInstance) return ffmpegInstance;
+    if (!loadingPromise) {
+      loadingPromise = (async () => {
+        const ffmpeg = new FFmpeg();
+        if (onStatus) ffmpeg.on('log', ({ message }) => onStatus(message));
+        const baseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm';
+        await ffmpeg.load({
+          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+        });
+        ffmpegInstance = ffmpeg;
+        return ffmpeg;
+      })();
+    }
+    return loadingPromise;
+  }
+
+  window.convertWebmToMp4 = async function (webmBlob, onStatus) {
+    if (onStatus) onStatus('loading MP4 engine\u2026');
+    const ffmpeg = await getFFmpeg(onStatus);
+    if (onStatus) onStatus('transcoding to MP4\u2026');
+    await ffmpeg.writeFile('input.webm', await fetchFile(webmBlob));
+    await ffmpeg.exec(['-i', 'input.webm', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', 'output.mp4']);
+    const data = await ffmpeg.readFile('output.mp4');
+    await ffmpeg.deleteFile('input.webm');
+    await ffmpeg.deleteFile('output.mp4');
+    return new Blob([data.buffer], { type: 'video/mp4' });
+  };
+</script>
 </body>
 </html>
