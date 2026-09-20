@@ -13,7 +13,6 @@
       <button class="menu-trigger">File</button>
       <div class="menu-dropdown">
         <button id="btn-import-images">Import images</button>
-        <button id="btn-import-audio">Import audio…</button>
         <button id="btn-open-watermark-dialog">Watermark…</button>
         <div class="menu-divider"></div>
         <button id="btn-save-project">Save project…</button>
@@ -36,15 +35,20 @@
         <label class="menu-checkbox"><input type="checkbox" id="fullscreen-on-play-toggle" checked /> Fullscreen upon play</label>
         <div class="menu-divider"></div>
         <button id="btn-toggle-inspector-menu">Toggle frame settings</button>
+        <div class="menu-divider"></div>
+        <button id="btn-view-master" class="view-mode-btn active-view" data-view="master"><span class="view-check">✓</span> Master view</button>
+        <button id="btn-view-tabular" class="view-mode-btn" data-view="tabular"><span class="view-check"></span> Tabular view</button>
       </div>
     </div>
     <div id="menubar-spacer"></div>
-    <button id="btn-pixabay">Find music (Pixabay)</button>
     <input type="file" id="file-images" accept="image/*" multiple class="hidden" />
     <input type="file" id="file-audio" accept="audio/*" class="hidden" />
     <input type="file" id="file-project" accept="application/json,.json" class="hidden" />
   </div>
 
+  <div id="mode-generator" class="app-mode hidden">
+
+  <div class="view-master">
   <div id="main">
     <div id="preview-area">
       <canvas id="preview-canvas" width="1280" height="720"></canvas>
@@ -89,65 +93,222 @@
     <div class="section-header" id="timeline-header">
       <span class="section-title">frame timeline</span>
       <span id="frame-count" class="section-badge">0 frames</span>
+      <button type="button" id="btn-select-all-frames" class="small-btn no-toggle">select all</button>
+      <button type="button" id="btn-clear-selection" class="small-btn no-toggle" disabled>clear selection</button>
+      <button type="button" id="btn-duplicate-selected" class="small-btn no-toggle" disabled>duplicate selected</button>
+      <button type="button" id="btn-reverse-selected" class="small-btn no-toggle" disabled>reverse order</button>
+      <button type="button" id="btn-delete-selected" class="small-btn no-toggle" disabled>delete selected</button>
       <span class="caret">▾</span>
     </div>
     <div id="frame-track" class="section-body"></div>
   </div>
+  </div><!-- /view-master -->
 
-  <div id="audio-section" class="accordion-section">
-    <div class="section-header collapsed" id="audio-header">
-      <span class="section-title">audio track</span>
-      <span id="audio-name" class="section-badge">none</span>
+  <div class="view-tabular hidden">
+    <div id="frame-tabular-toolbar">
+      <span id="frame-tabular-count" class="section-badge">0 frames</span>
+      <button type="button" id="btn-select-all-frames-tab" class="small-btn">select all</button>
+      <button type="button" id="btn-clear-selection-tab" class="small-btn" disabled>clear selection</button>
+      <button type="button" id="btn-duplicate-selected-tab" class="small-btn" disabled>duplicate selected</button>
+      <button type="button" id="btn-reverse-selected-tab" class="small-btn" disabled>reverse order</button>
+      <button type="button" id="btn-delete-selected-tab" class="small-btn" disabled>delete selected</button>
+    </div>
+    <div id="frame-table-wrap">
+      <table class="data-table" id="frame-table">
+        <thead><tr><th></th><th>#</th><th>thumb</th><th>duration (ms)</th><th>bundle</th><th>move / delete</th></tr></thead>
+        <tbody id="frame-table-body"></tbody>
+      </table>
+    </div>
+  </div><!-- /view-tabular -->
+
+  </div><!-- /mode-generator -->
+
+  <div id="mode-extractor" class="app-mode">
+    <div id="extractor-toolbar">
+      <button id="btn-extractor-import">Import image…</button>
+      <input type="file" id="file-extractor-image" accept="image/*" class="hidden" />
+      <div id="extractor-effect-toggle">
+        <button type="button" class="effect-btn active" data-effect="pan">Pan</button>
+        <button type="button" class="effect-btn" data-effect="zoom">Zoom</button>
+      </div>
+      <label>size
+        <select id="extractor-preset"></select>
+      </label>
+      <div id="extractor-custom-size-row" class="hidden">
+        <label>width <input type="number" id="extractor-custom-width" value="1080" min="16" /></label>
+        <label>height <input type="number" id="extractor-custom-height" value="1920" min="16" /></label>
+      </div>
+      <label id="extractor-slices-field">slices
+        <input type="number" id="extractor-slice-count" min="2" step="1" value="24" />
+      </label>
+      <span id="extractor-slice-hint"></span>
+      <button id="btn-extractor-smooth-lock" type="button">smooth motion lock</button>
+      <span id="extractor-pace-hint"></span>
+      <button id="btn-extractor-grid" type="button">grid</button>
+      <button id="btn-extractor-thirds" type="button">thirds</button>
+      <div id="extractor-toolbar-spacer"></div>
+      <button id="btn-extractor-generate" class="primary">Generate slices</button>
+      <span id="extractor-generate-status"></span>
+    </div>
+
+    <div id="extractor-stage-wrap">
+      <div id="extractor-stage">
+        <p id="extractor-empty-state">Import an image to begin</p>
+        <img id="extractor-image" class="hidden" alt="" />
+        <div id="extractor-grid-overlay" class="hidden"></div>
+        <svg id="extractor-connector" class="hidden"><line id="extractor-connector-line" x1="0" y1="0" x2="0" y2="0" /></svg>
+        <div id="extractor-box-origin" class="extractor-box hidden" data-role="origin">
+          <div class="extractor-box-thirds"></div>
+          <span class="extractor-box-label">origin</span>
+          <div class="extractor-box-handle" data-handle="resize"></div>
+        </div>
+        <div id="extractor-box-end" class="extractor-box hidden" data-role="end">
+          <div class="extractor-box-thirds"></div>
+          <span class="extractor-box-label">end</span>
+          <div class="extractor-box-handle" data-handle="resize"></div>
+        </div>
+      </div>
+    </div>
+  </div><!-- /mode-extractor -->
+
+  <div id="mode-audio" class="app-mode hidden">
+    <div id="audio-toolbar">
+      <button id="btn-import-audio">Import audio…</button>
+      <button id="btn-pixabay">Find music (Pixabay)</button>
+    </div>
+    <div class="view-master">
+    <div id="audio-section" class="accordion-section">
+      <div class="section-header" id="audio-header">
+        <span class="section-title">audio track</span>
+        <span id="audio-name" class="section-badge">none</span>
+        <span class="caret">▾</span>
+      </div>
+      <div id="audio-body" class="section-body">
+        <canvas id="audio-waveform" height="48"></canvas>
+        <p id="audio-hint">drag the orange handles to trim, or edit the fields below — everything saves as you go</p>
+        <p id="audio-selection-readout"></p>
+        <div id="audio-controls" class="hidden">
+          <label>trim start (s) <input type="number" id="audio-trim-start" min="0" step="0.1" value="0" /></label>
+          <label>trim end (s) <input type="number" id="audio-trim-end" min="0" step="0.1" /></label>
+          <label>start offset (s) <input type="number" id="audio-offset" min="0" step="0.1" value="0" /></label>
+          <label>volume <input type="range" id="audio-volume" min="0" max="100" value="100" /> <span id="audio-volume-readout">100%</span></label>
+          <div class="audio-controls-actions">
+            <button id="btn-audio-remove">remove audio</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    </div><!-- /view-master -->
+
+    <div class="view-tabular hidden">
+      <table class="data-table" id="audio-table">
+        <tbody id="audio-table-body"></tbody>
+      </table>
+    </div><!-- /view-tabular -->
+  </div><!-- /mode-audio -->
+
+  <div id="mode-subtitles" class="app-mode hidden">
+    <div class="view-master">
+    <div id="subtitle-section" class="accordion-section">
+      <div class="section-header" id="subtitle-header">
+        <span class="section-title">subtitles</span>
+        <span id="subtitle-count" class="section-badge">0</span>
+        <button type="button" id="btn-add-subtitle" class="small-btn no-toggle">+ add subtitle</button>
+        <span class="caret">▾</span>
+      </div>
+      <div id="subtitle-body" class="section-body">
+        <div id="subtitle-stage-wrap">
+          <div id="subtitle-stage">
+            <p id="subtitle-stage-empty">Add a subtitle to preview and drag it into position here</p>
+            <canvas id="subtitle-preview-canvas" class="hidden"></canvas>
+            <div id="subtitle-drag-box" class="hidden">
+              <span class="subtitle-drag-hint">drag to position</span>
+            </div>
+          </div>
+        </div>
+        <div id="subtitle-track"></div>
+        <div id="subtitle-edit" class="hidden">
+          <label>text
+            <textarea id="subtitle-text-input" rows="2"></textarea>
+          </label>
+          <div class="chip-row">
+            <span class="chip-row-label">size</span>
+            <button type="button" class="size-btn" data-size="small">S</button>
+            <button type="button" class="size-btn" data-size="medium">M</button>
+            <button type="button" class="size-btn" data-size="large">L</button>
+          </div>
+          <div class="chip-row">
+            <span class="chip-row-label">style</span>
+            <button type="button" class="style-btn" data-style="light-shadow">light + dark shadow</button>
+            <button type="button" class="style-btn" data-style="dark-glow">dark + light glow</button>
+          </div>
+          <div class="chip-row wrap">
+            <span class="chip-row-label">reveal</span>
+            <button type="button" class="reveal-btn" data-reveal="all">all at once</button>
+            <button type="button" class="reveal-btn" data-reveal="words">word by word</button>
+            <button type="button" class="reveal-btn" data-reveal="letters">per letter</button>
+          </div>
+          <div class="subtitle-time-row">
+            <label>start (s) <input type="number" id="subtitle-start-input" min="0" step="0.1" /></label>
+            <label>duration (s) <input type="number" id="subtitle-duration-input" min="0.1" step="0.1" /></label>
+          </div>
+          <p id="subtitle-edit-hint">changes save as you go</p>
+          <div class="subtitle-edit-actions">
+            <button id="btn-subtitle-preview-reveal" type="button">▶ preview reveal</button>
+            <button id="btn-subtitle-delete">delete</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    </div><!-- /view-master -->
+
+    <div class="view-tabular hidden">
+      <div id="subtitle-tabular-toolbar">
+        <button type="button" id="btn-add-subtitle-tab" class="small-btn">+ add subtitle</button>
+      </div>
+      <div id="subtitle-table-wrap">
+        <table class="data-table" id="subtitle-table">
+          <thead><tr><th>#</th><th>text</th><th>start (s)</th><th>duration (s)</th><th>size</th><th>style</th><th>reveal</th><th>delete</th></tr></thead>
+          <tbody id="subtitle-table-body"></tbody>
+        </table>
+      </div>
+    </div><!-- /view-tabular -->
+  </div><!-- /mode-subtitles -->
+
+  <div id="extracted-groups-panel" class="hidden">
+    <div class="section-header" id="extracted-groups-header">
+      <span class="section-title">extracted groups</span>
+      <span id="extracted-groups-count" class="section-badge">0</span>
       <span class="caret">▾</span>
     </div>
-    <div id="audio-body" class="section-body collapsed">
-      <canvas id="audio-waveform" height="48"></canvas>
-      <p id="audio-hint">click waveform to edit trim / offset / volume</p>
-      <div id="audio-controls" class="hidden">
-        <label>trim start (s) <input type="number" id="audio-trim-start" min="0" step="0.1" value="0" /></label>
-        <label>trim end (s) <input type="number" id="audio-trim-end" min="0" step="0.1" /></label>
-        <label>start offset (s) <input type="number" id="audio-offset" min="0" step="0.1" value="0" /></label>
-        <label>volume <input type="range" id="audio-volume" min="0" max="100" value="100" /> <span id="audio-volume-readout">100%</span></label>
-        <div class="audio-controls-actions">
-          <button id="btn-audio-apply" class="primary">apply</button>
-          <button id="btn-audio-remove">remove audio</button>
-        </div>
+    <div id="extracted-groups-body" class="section-body"></div>
+  </div>
+
+  <div id="mode-tabs">
+    <button type="button" class="mode-tab active" data-mode="extractor">Image extractor</button>
+    <button type="button" class="mode-tab" data-mode="generator">Movie generator</button>
+    <button type="button" class="mode-tab" data-mode="audio">Audio</button>
+    <button type="button" class="mode-tab" data-mode="subtitles">Subtitles</button>
+  </div>
+
+  <div id="extractor-large-batch-modal" class="hidden">
+    <div id="extractor-large-batch-body">
+      <h2>Large batch</h2>
+      <p id="extractor-large-batch-text"></p>
+      <div class="modal-actions">
+        <button id="btn-large-batch-cancel">cancel</button>
+        <button id="btn-large-batch-confirm" class="primary">generate anyway</button>
       </div>
     </div>
   </div>
 
-  <div id="subtitle-section" class="accordion-section">
-    <div class="section-header collapsed" id="subtitle-header">
-      <span class="section-title">subtitles</span>
-      <span id="subtitle-count" class="section-badge">0</span>
-      <button type="button" id="btn-add-subtitle" class="small-btn no-toggle">+ add subtitle</button>
-      <span class="caret">▾</span>
-    </div>
-    <div id="subtitle-body" class="section-body collapsed">
-      <div id="subtitle-track"></div>
-      <div id="subtitle-edit" class="hidden">
-        <label>text
-          <textarea id="subtitle-text-input" rows="2"></textarea>
-        </label>
-        <div class="chip-row">
-          <span class="chip-row-label">size</span>
-          <button type="button" class="size-btn" data-size="small">S</button>
-          <button type="button" class="size-btn" data-size="medium">M</button>
-          <button type="button" class="size-btn" data-size="large">L</button>
-        </div>
-        <div class="chip-row">
-          <span class="chip-row-label">style</span>
-          <button type="button" class="style-btn" data-style="light-shadow">light + dark shadow</button>
-          <button type="button" class="style-btn" data-style="dark-glow">dark + light glow</button>
-        </div>
-        <div class="subtitle-time-row">
-          <label>start (s) <input type="number" id="subtitle-start-input" min="0" step="0.1" /></label>
-          <label>duration (s) <input type="number" id="subtitle-duration-input" min="0.1" step="0.1" /></label>
-        </div>
-        <div class="subtitle-edit-actions">
-          <button id="btn-subtitle-apply" class="primary">apply</button>
-          <button id="btn-subtitle-delete">delete</button>
-        </div>
+  <div id="extractor-same-area-modal" class="hidden">
+    <div id="extractor-same-area-body">
+      <h2>Same spot</h2>
+      <p>Origin and end are in the same place, so every slice will be the same photo.</p>
+      <div class="modal-actions">
+        <button id="btn-same-area-cancel">cancel</button>
+        <button id="btn-same-area-confirm" class="primary">generate anyway</button>
       </div>
     </div>
   </div>
